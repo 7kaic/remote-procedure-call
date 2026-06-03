@@ -1,11 +1,12 @@
 import uuid
 from collections import deque
-from threading import Lock
+from threading import Lock, Condition
 
 class Server:
     def __init__(self):
         self.clients = {}
         self.lock = Lock()
+        self.condition = Condition(self.lock)
     
     def get_client(self, client_id):
         client = self.clients.get(client_id)
@@ -31,17 +32,23 @@ class Server:
             "client_id": client_id
         }
         
-    def beacon(self, client_id):
-        with self.lock:
+    def beacon(self, client_id, timeout=60):
+        with self.condition:
             client = self.get_client(client_id)
+
+            if not client["tasks"]:
+                self.condition.wait(timeout)
+
             task = client["tasks"].popleft() if client["tasks"] else None
 
         return {"task": task}
     
     def enqueue(self, client_id, task):
-        with self.lock:
+        with self.condition:
             client = self.get_client(client_id)
             client["tasks"].append(task)
+
+            self.condition.notify_all()
     
     def create_task(self, method, params=None):
         return {
