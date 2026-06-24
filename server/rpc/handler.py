@@ -3,6 +3,9 @@ from .protocol import response, process
 import json
 
 class RPCHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
     def do_POST(self):
         if self.path != "/rpc":
             self.send_response(404)
