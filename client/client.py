@@ -22,6 +22,7 @@ class Agent:
             "shell": self.handle_shell,
             "health": self.handle_health,
             "upload": self.handle_upload,
+            "download": self.handle_download,
         }
 
     def rpc(self, method, **params):
@@ -99,6 +100,11 @@ class Agent:
             f.write(base64.b64decode(data))
             
         return self.result(stdout=f"written: {path}")
+    
+    def handle_download(self, params):
+        path = params.get("path")
+        with open(path, "rb") as f:
+            return self.result(stdout=base64.b64encode(f.read()).decode())
 
     def handle_health(self, params):
         return self.result(

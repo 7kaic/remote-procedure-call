@@ -6,9 +6,10 @@ from threading import Lock, Condition
 class Server:
     def __init__(self):
         self.clients = {}
+        self.task_meta = {}
         self.lock = Lock()
         self.condition = Condition(self.lock)
-    
+ 
     def identify(self, hostname, mac):
         client_id = str(uuid.uuid4())
 
@@ -43,6 +44,12 @@ class Server:
             "path": remote_path,
             "data": data
         })
+    
+    def download_file(self, client_id, remote_path, local_path):
+        self.send_task(client_id, "download",
+            params = {"path": remote_path},
+            meta = {"local_path": local_path}
+        )
 
     def enqueue(self, client_id, task):
         with self.condition:
@@ -67,9 +74,10 @@ class Server:
             "params": params or {}
         }
 
-    def send_task(self, client_id, method, params=None):
+    def send_task(self, client_id, method, params=None, meta=None):
         task = self.create_task(method, params)
-
+        if meta:
+            self.task_meta[task["id"]] = meta
         try:
             self.enqueue(client_id, task)
         except Exception:
@@ -83,8 +91,15 @@ class Server:
         out = result["output"]
         status = result["status"]
         host = self.clients[client_id]["hostname"]
+        meta = self.task_meta.pop(task_id, None)
 
         print(f"[{host}] {status}")
+
+        if meta and status == "ok":
+            with open(meta["local_path"], "wb") as f:
+                f.write(base64.b64decode(out["stdout"]))
+            print(f" saved to {meta['local_path']}")
+            return
 
         output = out["stdout"] if status == "ok" else out["stderr"]
         if output:

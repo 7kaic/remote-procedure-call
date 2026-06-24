@@ -53,6 +53,18 @@ def cmd_upload(server, args, current_client):
 
     return current_client
 
+def cmd_download(server, args, current_client):
+    if not current_client:
+        print("no client selected")
+        return current_client
+    
+    if len(args) < 2:
+        print("usage: download <server_path> <client_path>")
+        return current_client
+    
+    server.download_file(current_client, args[0], args[1])
+    return current_client
+
 def cmd_health(server, args, current_client):
     if not current_client:
         print("no client selected")
@@ -86,6 +98,7 @@ def cmd_help(server, args, current_client):
 COMMANDS = {
     "shell": cmd_shell,
     "upload": cmd_upload,
+    "download": cmd_download,
     "health": cmd_health,
     "list": cmd_list,
     "results": cmd_results,
