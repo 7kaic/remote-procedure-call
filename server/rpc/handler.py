@@ -5,6 +5,13 @@ import json
 class RPCHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
+    
+    def write_json(self, body: bytes):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self):
         if self.path != "/rpc":
@@ -23,18 +30,8 @@ class RPCHandler(BaseHTTPRequestHandler):
                 self.send_response(204)
                 self.end_headers()
                 return
-
-            body = json.dumps(res).encode()
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            
+            self.write_json(json.dumps(res).encode())
 
         except Exception as e:
-            body = json.dumps(response(None, error="internal error")).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(body)
+            self.write_json(json.dumps(response(None, error="internal error")).encode())
