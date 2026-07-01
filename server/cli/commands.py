@@ -1,14 +1,27 @@
-def cmd_use(server, args, current_client):
+def _require_client(current_client):
+    if not current_client:
+        print("no client selected")
+        return False
+
+    return True
+
+def _require_args(args, usage):
     if not args:
-        print("usage: use <client_id>")
+        print(f"usage: {usage}")
+        return False
+
+    return True
+
+def cmd_use(server, args, current_client):
+    if not _require_args(args, "use <client_id>"):
         return current_client
-    
+
     cid = args[0]
 
     if cid not in server.clients:
         print("unknow client")
         return current_client
-    
+
     print (f"selected {cid}")
     return cid
 
@@ -23,20 +36,17 @@ def cmd_users(server, args, current_client):
     return current_client
 
 def cmd_health(server, args, current_client):
-    if not current_client:
-        print("no client selected")
+    if not _require_client(current_client):
         return current_client
     
     server.send_task(current_client, "health", {})
     return current_client
 
 def cmd_shell(server, args, current_client):
-    if not current_client:
-        print("no client selected")
+    if not _require_client(current_client):
         return current_client
         
-    if not args:
-        print("usage: shell <cmd>")
+    if not _require_args(args, "shell <cmd>"):
         return current_client
     
     server.send_task(current_client, "shell", {
@@ -46,8 +56,7 @@ def cmd_shell(server, args, current_client):
     return current_client
 
 def cmd_upload(server, args, current_client):
-    if not current_client:
-        print("no client selected")
+    if not _require_client(current_client):
         return current_client
     
     if len(args) < 2:
@@ -62,8 +71,7 @@ def cmd_upload(server, args, current_client):
     return current_client
 
 def cmd_download(server, args, current_client):
-    if not current_client:
-        print("no client selected")
+    if not _require_client(current_client):
         return current_client
     
     if len(args) < 2:
@@ -74,17 +82,26 @@ def cmd_download(server, args, current_client):
     return current_client
 
 def cmd_results(server, args, current_client):
-    if not current_client:
-        print("no client selected")
+    if not _require_client(current_client):
         return current_client
-    
-    client = server.clients[current_client]
 
-    for tid, r in client["results"].items():
+    for tid, r in server.clients[current_client]["results"].items():
         print(f"{tid} [{r['status']}] -> {r['output']}")
 
     return current_client
+
+def cmd_publish(server, args, current_client):
+    if not _require_args(args, "publish <file>"):
+        return current_client
     
+    try:
+        server.publish_download(args[0])
+        print(f"available: {args[0]}")
+    except Exception as e:
+        print(f"error: {e}")
+
+    return current_client
+
 def cmd_exit(server, args, current_client):
     print("bye")
     exit()
@@ -92,17 +109,18 @@ def cmd_exit(server, args, current_client):
 def cmd_help(server, args, current_client):
     print("available commands:")
     for name in COMMANDS:
-        print(f"- {name}")
+        print(f"{name}")
     return current_client
 
 COMMANDS = {
-    "use": cmd_use,
-    "users": cmd_users,
-    "health": cmd_health,
-    "shell": cmd_shell,
-    "upload": cmd_upload,
+    "use":      cmd_use,
+    "users":    cmd_users,
+    "health":   cmd_health,
+    "shell":    cmd_shell,
+    "upload":   cmd_upload,
     "download": cmd_download,
-    "results": cmd_results,
-    "exit": cmd_exit,
-    "help": cmd_help
+    "publish":  cmd_publish,
+    "results":  cmd_results,
+    "exit":     cmd_exit,
+    "help":     cmd_help
 }
