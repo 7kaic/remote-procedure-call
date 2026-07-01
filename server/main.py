@@ -8,17 +8,18 @@ import threading
 
 def main():
     server = Server()
-    dispatcher = Dispatcher()
 
+    dispatcher = Dispatcher()
     dispatcher.register("identify", server.identify)
     dispatcher.register("beacon", server.beacon)
     dispatcher.register("task_result", server.task_result)
     
-    RPCHandler.dispatcher = dispatcher
+    http = ThreadingHTTPServer(("0.0.0.0", 8000), RPCHandler)
+    http.app = server
+    http.dispatcher = dispatcher
 
     threading.Thread(target=run_cli, args=(server,), daemon=True).start()
-
-    ThreadingHTTPServer(("0.0.0.0", 8000), RPCHandler).serve_forever()
+    http.serve_forever()
 
 if __name__ == "__main__":
     main()
