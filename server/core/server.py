@@ -9,7 +9,6 @@ class Server:
         self.clients = {}
         self.task_meta = {}
         self.downloads = {}
-        self.download_dir = Path(__file__).parent.parent / "downloads"
         self.lock = Lock()
         
     def identify(self, hostname, mac):
@@ -97,14 +96,15 @@ class Server:
             meta = {"local_path": local_path}
         )
     
-    def publish_download(self, name):
-        path = self.download_dir / name
+    def publish(self, path):
+        path = Path(path)
         if not path.exists():
             raise FileNotFoundError(f"file not found: {name}")
-        self.downloads[name] = path
+        self.downloads[path.name] = path
+        return path.name
     
-    def get_publish_download(self, name):
+    def get_download(self, name):
         path = self.downloads.get(name)
         if not path:
             raise FileNotFoundError(f"file not found: {name}") 
-        return Path(path)
+        return path
