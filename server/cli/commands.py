@@ -5,8 +5,8 @@ def _require_client(current_client):
 
     return True
 
-def _require_args(args, usage):
-    if not args:
+def _require_args(args, usage, count=1):
+    if len(args) < count:
         print(f"usage: {usage}")
         return False
 
@@ -58,9 +58,8 @@ def cmd_shell(server, args, current_client):
 def cmd_upload(server, args, current_client):
     if not _require_client(current_client):
         return current_client
-    
-    if len(args) < 2:
-        print("usage: upload <server_path> <client_path>")
+
+    if not _require_args(args, "usage: upload <server_path> <client_path>", count=2):    
         return current_client
 
     try:
@@ -74,8 +73,7 @@ def cmd_download(server, args, current_client):
     if not _require_client(current_client):
         return current_client
     
-    if len(args) < 2:
-        print("usage: download <client_path> <server_path>")
+    if _require_args(args, "usage: download <client_path> <server_path>", count=2):
         return current_client
     
     server.download_file(current_client, args[0], args[1])
@@ -95,8 +93,8 @@ def cmd_publish(server, args, current_client):
         return current_client
     
     try:
-        server.publish_download(args[0])
-        print(f"available: {args[0]}")
+        name = server.publish(args[0])
+        print(f"{name} allowed to download. [default endpoint: ADDRESS:PORT/downloads/{name}]")
     except Exception as e:
         print(f"error: {e}")
 

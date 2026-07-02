@@ -8,16 +8,13 @@ def run_cli(server):
             parts = input(">> ").strip().split()
             if not parts:
                 continue
-            
-            name = parts[0]
-            args = parts[1:]
 
-            cmd = COMMANDS.get(name)
+            cmd = COMMANDS.get(parts[0])
             if not cmd:
                 print("unknown command (type 'help')")
                 continue
 
-            current_client = cmd(server, args, current_client)
+            current_client = cmd(server, parts[1:], current_client)
 
         except KeyboardInterrupt:
              print("\nuse 'exit' to quit")
