@@ -3,8 +3,8 @@ from .protocol import response, process
 import json
 
 class RPCHandler(BaseHTTPRequestHandler):
-    #def log_message(self, format, *args):
-        #pass
+    def log_message(self, format, *args):
+        pass
     
     def write_json(self, body: bytes):
         self.send_response(200)
@@ -12,23 +12,23 @@ class RPCHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+    
+    def write_error(self, code: int):
+        self.send_response(code)
+        self.end_headers()
 
     def do_POST(self):
         if self.path != "/rpc":
-            self.send_response(404)
-            self.end_headers()
+            self.write_error(404)
             return
 
         try:
             length = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(length)
-            data = json.loads(raw.decode("utf-8"))
-
+            data = json.loads(self.rfile.read(length))
             res = process(self.server.dispatcher, data)
 
             if res is None:
-                self.send_response(204)
-                self.end_headers()
+                self.write_error(204)
                 return
             
             self.write_json(json.dumps(res).encode())
@@ -38,14 +38,13 @@ class RPCHandler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         if not self.path.startswith("/download/"):
-            self.send_response(404)
-            self.end_headers()
+            self.write_error(404)
             return
         
         name = self.path.removeprefix("/download/")
 
         try:
-            path = self.server.app.get_publish_download(name)
+            path = self.server.app.get_download(name)
             size = path.stat().st_size
 
             self.send_response(200)
@@ -59,5 +58,4 @@ class RPCHandler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk)
 
         except Exception as e:
-            self.send_response(500)
-            self.end_headers()
+            self.write_error(500)
