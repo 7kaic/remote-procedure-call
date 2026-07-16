@@ -100,9 +100,12 @@ def cmd_publish(server, args, current_client):
 
     return current_client
 
-def cmd_exit(server, args, current_client):
-    print("bye")
-    exit()
+def cmd_disconnect(server, args, current_client):
+    if not _require_client(current_client): 
+        return current_client
+    
+    server.disconnect(current_client)
+    return None
 
 def cmd_help(server, args, current_client):
     print("available commands:")
@@ -111,14 +114,14 @@ def cmd_help(server, args, current_client):
     return current_client
 
 COMMANDS = {
-    "use":      cmd_use,
-    "users":    cmd_users,
-    "health":   cmd_health,
-    "shell":    cmd_shell,
-    "upload":   cmd_upload,
-    "download": cmd_download,
-    "publish":  cmd_publish,
-    "results":  cmd_results,
-    "exit":     cmd_exit,
-    "help":     cmd_help
+    "use":        cmd_use,
+    "users":      cmd_users,
+    "health":     cmd_health,
+    "shell":      cmd_shell,
+    "upload":     cmd_upload,
+    "download":   cmd_download,
+    "publish":    cmd_publish,
+    "results":    cmd_results,
+    "help":       cmd_help,
+    "disconnect": cmd_disconnect
 }

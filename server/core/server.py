@@ -108,3 +108,12 @@ class Server:
         if not path:
             raise FileNotFoundError(f"file not found: {name}") 
         return path
+    
+    def disconnect(self, client_id):
+        self.send_task(client_id, "disconnect", {})
+
+        with self.lock:
+            client = self.clients.pop(client_id, None)
+        
+        if client:
+            print(f"[-] disconnected {client['hostname']}")

