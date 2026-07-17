@@ -31,7 +31,8 @@ def cmd_users(server, args, current_client):
         return current_client
 
     for cid, c in server.clients.items():
-        print(f"{cid} | {c['hostname']} | {c['mac']}")
+        marker = "*" if cid == current_client else " "
+        print(f"{marker} {cid} | {c['hostname']} | {c['mac']}")
     
     return current_client
 
@@ -94,7 +95,7 @@ def cmd_publish(server, args, current_client):
     
     try:
         name = server.publish(args[0])
-        print(f"{name} allowed to download. [default endpoint: ADDRESS:PORT/downloads/{name}]")
+        print(f"{name} allowed to download. [default endpoint: http://ADDRESS:PORT/downloads/{name}]")
     except Exception as e:
         print(f"error: {e}")
 
@@ -108,20 +109,21 @@ def cmd_disconnect(server, args, current_client):
     return None
 
 def cmd_help(server, args, current_client):
-    print("available commands:")
-    for name in COMMANDS:
-        print(f"{name}")
+    for name, (_, desc) in COMMANDS.items():
+        print(f"    {name:<12} {desc}")
     return current_client
 
-COMMANDS = {
-    "use":        cmd_use,
-    "users":      cmd_users,
-    "health":     cmd_health,
-    "shell":      cmd_shell,
-    "upload":     cmd_upload,
-    "download":   cmd_download,
-    "publish":    cmd_publish,
-    "results":    cmd_results,
-    "help":       cmd_help,
-    "disconnect": cmd_disconnect
+COMMANDS = {    
+    "use":        (cmd_use,         "select a client - use <client_id>"),
+    "users":      (cmd_users,       "list connected clients"),
+    "disconnect": (cmd_disconnect,  "disconnect selected client"),
+    "health":     (cmd_health,      "check client health\n"),
+
+    "shell":      (cmd_shell,       "execute a shell command - shell <cmd>"),
+    "upload":     (cmd_upload,      "send file to client - upload <src> <dst>"),
+    "download":   (cmd_download,    "download file from client - download <src> <dst>"),
+    "publish":    (cmd_publish,     "publish file on http endpoint for download - publish <path>\n"),
+
+    "results":    (cmd_results,     "show task results"),
+    "help":       (cmd_help,        "show this message"),
 }

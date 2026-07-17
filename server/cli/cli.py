@@ -4,12 +4,13 @@ def run_cli(server):
     current_client = None
 
     while True:
-        try:   
-            parts = input(">> ").strip().split()
+        try:
+            prompt = f"[{current_client[:8]}]>> " if current_client else ">> "
+            parts = input(prompt).strip().split()
             if not parts:
                 continue
 
-            cmd = COMMANDS.get(parts[0])
+            cmd, _ = COMMANDS.get(parts[0], (None, None))
             if not cmd:
                 print("unknown command (type 'help')")
                 continue
