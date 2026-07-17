@@ -6,8 +6,21 @@ from cli.cli import run_cli
 from http.server import ThreadingHTTPServer
 import threading
 
+def banner():
+    print("""                         
+    ██████  ██████   ██████ 
+    ██   ██ ██   ██ ██      
+    ██████  ██████  ██      
+    ██   ██ ██      ██      
+    ██   ██ ██       ██████       
+
+    remote procedure call - server online
+    type "help" for commands          
+    """)
+
 def main():
     server = Server()
+    banner()
 
     dispatcher = Dispatcher()
     dispatcher.register("identify", server.identify)

@@ -23,7 +23,7 @@ class Server:
                 "condition": Condition(self.lock)
             }
 
-        print(f"[+] connected {hostname} ({client_id})")
+        print(f"\n [+] {hostname} connected ({client_id})")
         return {"status": "ok", "client_id": client_id}
     
     def get_client(self, client_id):
