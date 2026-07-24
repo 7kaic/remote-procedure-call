@@ -23,7 +23,7 @@ class Server:
                 "condition": Condition(self.lock)
             }
 
-        print(f"\n [+] {hostname} connected ({client_id})")
+        print(f"\r [+] {hostname} connected ({client_id})")
         return {"status": "ok", "client_id": client_id}
     
     def get_client(self, client_id):
@@ -69,7 +69,7 @@ class Server:
         status = result["status"]
         meta = self.task_meta.pop(task_id, None)
 
-        print(f"[{host}] {status}")
+        print(f"\n[{host}] {status}")
 
         if meta and status == "ok":
             with open(meta["local_path"], "wb") as f:
@@ -79,7 +79,7 @@ class Server:
 
         output = out["stdout"] if status == "ok" else out["stderr"]
         if output:
-            print(f" {output}")
+            print(f"{output}")
 
     def upload_file(self, client_id, local_path, remote_path):
         with open(local_path, "rb") as f:
