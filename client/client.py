@@ -1,15 +1,14 @@
-#import requests
-import http.client
-import urllib.parse
-
 import os
-import time
-import threading
 import uuid
 import json
-import socket
-import subprocess
+import time
 import base64
+import socket
+import threading
+import subprocess
+
+import http.client
+import urllib.parse
 
 SERVER = "127.0.0.1"
 PORT = 8000
